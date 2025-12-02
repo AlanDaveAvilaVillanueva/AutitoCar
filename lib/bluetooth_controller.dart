@@ -22,14 +22,14 @@ class BluetoothController with ChangeNotifier {
   BluetoothController() {
     _isScanningSubscription = FlutterBluePlus.isScanning.listen((state) {
       _isScanning = state;
-      notifyListeners();
+      Future.microtask(() => notifyListeners());
     });
   }
 
   // --- Scanning --- 
   Future<void> startScan() async {
     _devices.clear();
-    notifyListeners();
+    Future.microtask(() => notifyListeners());
 
     // The isScanning stream will notify listeners of state changes
     await FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
@@ -41,7 +41,7 @@ class BluetoothController with ChangeNotifier {
         newDevices.add(r.device);
       }
       _devices = newDevices.toList();
-      notifyListeners();
+      Future.microtask(() => notifyListeners());
     }, onError: (e) => developer.log('Error listening to scan results', error: e));
   }
 
@@ -63,7 +63,7 @@ class BluetoothController with ChangeNotifier {
            _connectedDevice = null;
         }
       }
-      notifyListeners();
+      Future.microtask(() => notifyListeners());
     });
 
     try {
@@ -80,7 +80,7 @@ class BluetoothController with ChangeNotifier {
     _connectionStateSubscription = null;
     _connectedDevice = null;
     _connectionState = BluetoothConnectionState.disconnected;
-    notifyListeners();
+    Future.microtask(() => notifyListeners());
   }
 
   // --- Sending Data ---

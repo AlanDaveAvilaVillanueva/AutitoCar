@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:myapp/bluetooth_controller.dart';
 import 'package:myapp/main.dart'; // Importing ThemeProvider
 
-// Convert to a StatefulWidget to manage the slider's state
+// Main screen widget
 class ControlScreen extends StatefulWidget {
   const ControlScreen({super.key});
 
@@ -53,9 +53,8 @@ class _ControlScreenState extends State<ControlScreen> {
                     children: [
                       _buildStatusIndicator(context, controller.isConnected, isDarkMode),
                       const SizedBox(height: 30),
-                      _buildConnectionButtons(context, controller),
+                      _buildConnectionButtons(context),
                       const SizedBox(height: 40),
-                      // Add the Speed Slider if connected
                       if (controller.isConnected)
                         _buildSpeedSlider(context, controller.sendData),
                       const SizedBox(height: 40),
@@ -69,6 +68,18 @@ class _ControlScreenState extends State<ControlScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  // Updated to not pass the controller directly
+  void _showDeviceList(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => const _DeviceListSheet(), // Use the new stateful widget
     );
   }
 
@@ -90,7 +101,6 @@ class _ControlScreenState extends State<ControlScreen> {
               _speed = value;
             });
           },
-          // Send data only when the user finishes sliding
           onChangeEnd: (double value) {
             sendData('S:${value.round()}');
           },
@@ -103,18 +113,12 @@ class _ControlScreenState extends State<ControlScreen> {
     const double buttonSize = 90.0;
     const double borderRadius = 28.0;
 
-    // Press and Hold action
     void handlePress(String direction) {
-      if (isConnected) {
-        sendData(direction);
-      }
+      if (isConnected) sendData(direction);
     }
 
-    // Release action
     void handleRelease() {
-      if (isConnected) {
-        sendData('stop');
-      }
+      if (isConnected) sendData('stop');
     }
 
     return SizedBox(
@@ -130,7 +134,6 @@ class _ControlScreenState extends State<ControlScreen> {
           _buildControlButton(context, icon: Icons.arrow_upward, onPress: () => handlePress('forward'), onRelease: handleRelease, isEnabled: isConnected, size: buttonSize, borderRadius: borderRadius),
           Container(),
           _buildControlButton(context, icon: Icons.arrow_back, onPress: () => handlePress('left'), onRelease: handleRelease, isEnabled: isConnected, size: buttonSize, borderRadius: borderRadius),
-          // The center button is no longer needed
           Container(), 
           _buildControlButton(context, icon: Icons.arrow_forward, onPress: () => handlePress('right'), onRelease: handleRelease, isEnabled: isConnected, size: buttonSize, borderRadius: borderRadius),
           Container(),
@@ -147,7 +150,7 @@ class _ControlScreenState extends State<ControlScreen> {
     return GestureDetector(
       onTapDown: (_) => onPress(),
       onTapUp: (_) => onRelease(),
-      onTapCancel: () => onRelease(), // Also stop if the gesture is cancelled
+      onTapCancel: () => onRelease(),
       child: Container(
         decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(borderRadius),
@@ -177,8 +180,6 @@ class _ControlScreenState extends State<ControlScreen> {
       ),
     );
   }
-
-  // Unchanged methods from here
 
   Widget _buildStatusIndicator(BuildContext context, bool isConnected, bool isDarkMode) {
     final Color connectedColor = Colors.green.shade400;
@@ -219,12 +220,15 @@ class _ControlScreenState extends State<ControlScreen> {
     );
   }
 
-  Widget _buildConnectionButtons(BuildContext context, BluetoothController controller) {
+  Widget _buildConnectionButtons(BuildContext context) {
+    // Access controller via Consumer in the parent or here if needed, but for callbacks it's cleaner to get it from context.
+    final controller = Provider.of<BluetoothController>(context, listen: false);
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         ElevatedButton.icon(
-          onPressed: () => _showDeviceList(context, controller),
+          onPressed: () => _showDeviceList(context),
           icon: const Icon(Icons.bluetooth_searching, size: 20),
           label: const Text('CONECTAR'),
           style: Theme.of(context).elevatedButtonTheme.style?.copyWith(
@@ -233,7 +237,7 @@ class _ControlScreenState extends State<ControlScreen> {
         ),
         const SizedBox(width: 20),
         ElevatedButton.icon(
-          onPressed: controller.isConnected ? controller.disconnect : null,
+          onPressed: context.watch<BluetoothController>().isConnected ? controller.disconnect : null,
           icon: const Icon(Icons.power_settings_new, size: 20),
           label: const Text('APAGAR'),
           style: Theme.of(context).elevatedButtonTheme.style?.copyWith(
@@ -247,71 +251,83 @@ class _ControlScreenState extends State<ControlScreen> {
       ],
     );
   }
+}
 
-  void _showDeviceList(BuildContext context, BluetoothController controller) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        if (kIsWeb) {
-          return Container(
-            padding: const EdgeInsets.all(32),
-            child: const Center(
-              child: Text(
-                'La funcionalidad Bluetooth no está disponible en la vista previa web. Por favor, utiliza el emulador de Android para probar esta característica.',
-                style: TextStyle(fontSize: 16),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          );
-        }
+// A new stateful widget for the content of the modal bottom sheet.
+class _DeviceListSheet extends StatefulWidget {
+  const _DeviceListSheet();
 
-        controller.startScan();
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.5,
-          maxChildSize: 0.9,
-          minChildSize: 0.3,
-          builder: (BuildContext context, ScrollController scrollController) {
-            return Consumer<BluetoothController>(
-              builder: (context, controller, child) {
-                if (controller.isScanning && controller.devices.isEmpty) {
-                  return const Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircularProgressIndicator(),
-                        SizedBox(height: 20),
-                        Text("Buscando dispositivos..."),
-                      ],
-                    ),
-                  );
-                }
-                if (!controller.isScanning && controller.devices.isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(20.0),
-                      child: Text("No se encontraron dispositivos Bluetooth cercanos.", textAlign: TextAlign.center),
-                    ),
-                  );
-                }
-                return ListView.builder(
-                  controller: scrollController,
-                  itemCount: controller.devices.length,
-                  itemBuilder: (context, index) {
-                    final device = controller.devices[index];
-                    return ListTile(
-                      leading: const Icon(Icons.bluetooth),
-                      title: Text(device.name ?? 'Dispositivo Desconocido'),
-                      subtitle: Text(device.id.toString()),
-                      onTap: () {
-                        controller.connectToDevice(device);
-                        Navigator.pop(context);
-                      },
-                    );
+  @override
+  State<_DeviceListSheet> createState() => _DeviceListSheetState();
+}
+
+class _DeviceListSheetState extends State<_DeviceListSheet> {
+  @override
+  void initState() {
+    super.initState();
+    // Use a post-frame callback to safely call `startScan` after the build is complete.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Access the controller without listening to avoid unnecessary rebuilds of this state.
+      Provider.of<BluetoothController>(context, listen: false).startScan();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (kIsWeb) {
+      return Container(
+        padding: const EdgeInsets.all(32),
+        child: const Center(
+          child: Text(
+            'La funcionalidad Bluetooth no está disponible en la vista previa web. Por favor, utiliza el emulador de Android para probar esta característica.',
+            style: TextStyle(fontSize: 16),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.5,
+      maxChildSize: 0.9,
+      minChildSize: 0.3,
+      builder: (BuildContext context, ScrollController scrollController) {
+        // Use Consumer here to react to changes in the BluetoothController
+        return Consumer<BluetoothController>(
+          builder: (context, controller, child) {
+            if (controller.isScanning && controller.devices.isEmpty) {
+              return const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 20),
+                    Text("Buscando dispositivos..."),
+                  ],
+                ),
+              );
+            }
+            if (!controller.isScanning && controller.devices.isEmpty) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(20.0),
+                  child: Text("No se encontraron dispositivos Bluetooth cercanos.", textAlign: TextAlign.center),
+                ),
+              );
+            }
+            return ListView.builder(
+              controller: scrollController,
+              itemCount: controller.devices.length,
+              itemBuilder: (context, index) {
+                final device = controller.devices[index];
+                return ListTile(
+                  leading: const Icon(Icons.bluetooth),
+                  title: Text(device.name ?? 'Dispositivo Desconocido'),
+                  subtitle: Text(device.id.toString()),
+                  onTap: () {
+                    controller.connectToDevice(device);
+                    Navigator.pop(context);
                   },
                 );
               },
