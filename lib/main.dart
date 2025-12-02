@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:myapp/bluetooth_controller.dart';
 import 'package:myapp/control_screen.dart';
@@ -29,8 +30,29 @@ void main() {
   );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+
+  @override
+  void initState() {
+    super.initState();
+    _requestPermissions();
+  }
+
+  Future<void> _requestPermissions() async {
+    // Solicitar permisos de Bluetooth y ubicación
+    await [ 
+      Permission.bluetoothScan,
+      Permission.bluetoothConnect,
+      Permission.location,
+    ].request();
+  }
 
   @override
   Widget build(BuildContext context) {
