@@ -9,23 +9,40 @@ class BluetoothController with ChangeNotifier {
   BluetoothDevice? _connectedDevice;
   BluetoothConnectionState _connectionState = BluetoothConnectionState.disconnected;
   StreamSubscription<BluetoothConnectionState>? _connectionStateSubscription;
+  StreamSubscription<bool>? _isScanningSubscription;
+  bool _isScanning = false;
 
   List<BluetoothDevice> get devices => _devices;
   BluetoothDevice? get connectedDevice => _connectedDevice;
   BluetoothConnectionState get connectionState => _connectionState;
+  bool get isScanning => _isScanning;
 
   bool get isConnected => _connectionState == BluetoothConnectionState.connected;
+
+  BluetoothController() {
+    _isScanningSubscription = FlutterBluePlus.isScanning.listen((state) {
+      _isScanning = state;
+      notifyListeners();
+    });
+  }
 
   // --- Scanning --- 
   Future<void> startScan() async {
     _devices.clear();
     notifyListeners();
 
+    // The isScanning stream will notify listeners of state changes
     await FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
+    
     FlutterBluePlus.scanResults.listen((results) {
-      _devices = results.map((r) => r.device).toList();
+      // Use a Set to avoid duplicates, then convert back to a List
+      final newDevices = <BluetoothDevice>{};
+      for (var r in results) {
+        newDevices.add(r.device);
+      }
+      _devices = newDevices.toList();
       notifyListeners();
-    });
+    }, onError: (e) => developer.log('Error listening to scan results', error: e));
   }
 
   void stopScan() {
@@ -36,27 +53,31 @@ class BluetoothController with ChangeNotifier {
   Future<void> connectToDevice(BluetoothDevice device) async {
     stopScan();
     
+    _connectionStateSubscription?.cancel(); // Cancel any previous subscription
     _connectionStateSubscription = device.connectionState.listen((state) {
       _connectionState = state;
       if (state == BluetoothConnectionState.connected) {
         _connectedDevice = device;
       } else {
-        _connectedDevice = null;
+        if (_connectedDevice == device) { // Only clear if it's the same device disconnecting
+           _connectedDevice = null;
+        }
       }
       notifyListeners();
     });
 
     try {
-      await device.connect();
+      await device.connect(timeout: const Duration(seconds: 15));
     } catch (e) {
       developer.log('Error connecting to device', error: e);
+      _connectionStateSubscription?.cancel();
     }
   }
 
   Future<void> disconnect() async {
+    await _connectedDevice?.disconnect();
     await _connectionStateSubscription?.cancel();
     _connectionStateSubscription = null;
-    await _connectedDevice?.disconnect();
     _connectedDevice = null;
     _connectionState = BluetoothConnectionState.disconnected;
     notifyListeners();
@@ -64,27 +85,37 @@ class BluetoothController with ChangeNotifier {
 
   // --- Sending Data ---
   Future<void> sendData(String data) async {
-    if (!isConnected || _connectedDevice == null) return;
-
-    // Discover services and characteristics
-    List<BluetoothService> services = await _connectedDevice!.discoverServices();
+    if (!isConnected || _connectedDevice == null) {
+      developer.log('Not connected, cannot send data.');
+      return;
+    }
     
-    // Find the correct service and characteristic for your Arduino
-    // This is a placeholder - you MUST replace the UUIDs with your actual ones.
     try {
-      var targetService = services.firstWhere((s) => s.uuid.toString() == 'YOUR_SERVICE_UUID');
-      var targetCharacteristic = targetService.characteristics.firstWhere((c) => c.uuid.toString() == 'YOUR_CHARACTERISTIC_UUID');
+      // Discover services - this is crucial!
+      List<BluetoothService> services = await _connectedDevice!.discoverServices();
       
-      // Write the data
-      await targetCharacteristic.write(data.codeUnits);
+      // *******************************************************************
+      // !! URGENTE: DEBES REEMPLAZAR ESTOS VALORES UUID !!
+      // Busca los UUIDs correctos para tu módulo Bluetooth (HC-05, etc.)
+      // *******************************************************************
+      const String serviceUUID = "00001101-0000-1000-8000-00805f9b34fb"; // UUID estándar para SPP
+      const String characteristicUUID = "00001101-0000-1000-8000-00805f9b34fb";
+
+      var targetService = services.firstWhere((s) => s.uuid.toString().toLowerCase() == serviceUUID);
+      var targetCharacteristic = targetService.characteristics.firstWhere((c) => c.uuid.toString().toLowerCase() == characteristicUUID);
+      
+      // Write the data as a list of bytes
+      await targetCharacteristic.write(data.codeUnits, withoutResponse: true);
+       developer.log('Sent data: $data');
     } catch (e) {
-      developer.log('Error sending data', error: e);
+      developer.log('Error sending data: Service/Characteristic not found or write failed.', error: e);
     }
   }
 
   @override
   void dispose() {
-    disconnect();
+    _connectionStateSubscription?.cancel();
+    _isScanningSubscription?.cancel();
     super.dispose();
   }
 }

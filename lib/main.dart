@@ -5,10 +5,25 @@ import 'package:provider/provider.dart';
 import 'package:myapp/bluetooth_controller.dart';
 import 'package:myapp/control_screen.dart';
 
+// A provider to allow toggling the theme
+class ThemeProvider with ChangeNotifier {
+  ThemeMode _themeMode = ThemeMode.dark; // Default to dark mode for a professional feel
+
+  ThemeMode get themeMode => _themeMode;
+
+  void toggleTheme() {
+    _themeMode = _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+    notifyListeners();
+  }
+}
+
 void main() {
   runApp(
-    ChangeNotifierProvider(
-      create: (context) => BluetoothController(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => ThemeProvider()),
+        ChangeNotifierProvider(create: (context) => BluetoothController()),
+      ],
       child: const MyApp(),
     ),
   );
@@ -19,85 +34,84 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const Color primarySeedColor = Colors.deepPurple;
+    // A more professional and modern color seed
+    const Color primarySeedColor = Colors.indigo;
 
-    final TextTheme appTextTheme = TextTheme(
-      displayLarge: GoogleFonts.oswald(fontSize: 57, fontWeight: FontWeight.bold),
-      titleLarge: GoogleFonts.roboto(fontSize: 22, fontWeight: FontWeight.w500),
-      bodyMedium: GoogleFonts.openSans(fontSize: 14),
-    );
+    // Using a clean, modern font like Poppins
+    final TextTheme appTextTheme = GoogleFonts.poppinsTextTheme(Theme.of(context).textTheme);
 
-    final ButtonStyle elevatedButtonStyle = ButtonStyle(
-      foregroundColor: MaterialStateProperty.all<Color>(Colors.white),
-      backgroundColor: MaterialStateProperty.all<Color>(primarySeedColor),
-      shape: MaterialStateProperty.all<RoundedRectangleBorder>(
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-      padding: MaterialStateProperty.all<EdgeInsetsGeometry>(
-        const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      ),
-      textStyle: MaterialStateProperty.all<TextStyle>(
-        GoogleFonts.roboto(fontSize: 16, fontWeight: FontWeight.w500),
-      ),
-      overlayColor: MaterialStateProperty.resolveWith<Color?>(
-        (Set<MaterialState> states) {
-          if (states.contains(MaterialState.pressed)) {
-            return Colors.white.withOpacity(0.2);
-          }
-          return null; // Defer to the widget's default.
-        },
+    // --- Base Button Style ---
+    final ElevatedButtonThemeData elevatedButtonTheme = ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        foregroundColor: Colors.white,
+        backgroundColor: primarySeedColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        textStyle: appTextTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
+        elevation: 5,
+        shadowColor: Colors.black.withOpacity(0.4),
       ),
     );
 
+    // --- Light Theme ---
     final ThemeData lightTheme = ThemeData(
       useMaterial3: true,
+      brightness: Brightness.light,
       colorScheme: ColorScheme.fromSeed(
         seedColor: primarySeedColor,
         brightness: Brightness.light,
       ),
       textTheme: appTextTheme,
       appBarTheme: AppBarTheme(
-        backgroundColor: primarySeedColor,
-        foregroundColor: Colors.white,
-        titleTextStyle: GoogleFonts.oswald(fontSize: 24, fontWeight: FontWeight.bold),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        titleTextStyle: appTextTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.black87),
       ),
-      elevatedButtonTheme: ElevatedButtonThemeData(style: elevatedButtonStyle),
+      scaffoldBackgroundColor: const Color(0xFFF5F7FA), // A gentle off-white
+      elevatedButtonTheme: elevatedButtonTheme,
+      cardTheme: CardThemeData( // Corrected from CardTheme
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        color: Colors.white,
+      ),
     );
 
+    // --- Dark Theme ---
     final ThemeData darkTheme = ThemeData(
       useMaterial3: true,
+      brightness: Brightness.dark,
       colorScheme: ColorScheme.fromSeed(
         seedColor: primarySeedColor,
         brightness: Brightness.dark,
       ),
       textTheme: appTextTheme,
       appBarTheme: AppBarTheme(
-        backgroundColor: Colors.grey[900],
-        foregroundColor: Colors.white,
-        titleTextStyle: GoogleFonts.oswald(fontSize: 24, fontWeight: FontWeight.bold),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        titleTextStyle: appTextTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
       ),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: elevatedButtonStyle.copyWith(
-          foregroundColor: MaterialStateProperty.all<Color>(Colors.black),
-          backgroundColor: MaterialStateProperty.all<Color>(Colors.deepPurple.shade200),
-           overlayColor: MaterialStateProperty.resolveWith<Color?>(
-            (Set<MaterialState> states) {
-              if (states.contains(MaterialState.pressed)) {
-                return Colors.black.withOpacity(0.2);
-              }
-              return null; // Defer to the widget's default.
-            },
-          ),
-        ),
+      scaffoldBackgroundColor: const Color(0xFF1A1C2A), // A deep, modern blue-grey
+      elevatedButtonTheme: elevatedButtonTheme,
+      cardTheme: CardThemeData( // Corrected from CardTheme
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        color: const Color(0xFF26293D), // A slightly lighter container color
       ),
     );
 
-    return MaterialApp(
-      title: 'Bluetooth Control App',
-      theme: lightTheme,
-      darkTheme: darkTheme,
-      themeMode: ThemeMode.system, 
-      home: const ControlScreen(),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        return MaterialApp(
+          title: 'AutitoCar Control',
+          theme: lightTheme,
+          darkTheme: darkTheme,
+          themeMode: themeProvider.themeMode,
+          debugShowCheckedModeBanner: false,
+          home: const ControlScreen(),
+        );
+      },
     );
   }
 }
