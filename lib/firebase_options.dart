@@ -53,16 +53,18 @@ class DefaultFirebaseOptions {
     apiKey: 'AIzaSyAkeX6NuRroHhfMtNysuE-nV0t6UolEcG0',
     appId: '1:76181314422:web:c80e8db9cafc89b27bb857',
     messagingSenderId: '76181314422',
-    projectId: 'autitocar-42115182-79f5b',
-    authDomain: 'autitocar-42115182-79f5b.firebaseapp.com',
-    storageBucket: 'autitocar-42115182-79f5b.firebasestorage.app',
+    projectId: 'autitocar-421151',
+    authDomain: 'autitocar-421151.firebaseapp.com',
+    databaseURL: 'https://autitocar-421151-default-rtdb.firebaseio.com',
+    storageBucket: 'autitocar-421151.appspot.com',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyC2c6Vk8mNNkKQrHAZhLS4mYCPVas9hYRs',
     appId: '1:76181314422:android:58a21da0c75091af7bb857',
     messagingSenderId: '76181314422',
-    projectId: 'autitocar-42115182-79f5b',
-    storageBucket: 'autitocar-42115182-79f5b.firebasestorage.app',
+    projectId: 'autitocar-421151',
+    databaseURL: 'https://autitocar-421151-default-rtdb.firebaseio.com',
+    storageBucket: 'autitocar-421151.appspot.com',
   );
 }

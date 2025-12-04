@@ -2,88 +2,93 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:myapp/control_screen.dart';
+import 'package:myapp/login_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'firebase_options.dart';
 import 'dart:async';
 
-// Provider para gestionar el estado de la conexión con Firebase
+// --- Gestor de Estado para la Conexión con CONEXIÓN MANUAL ---
 class ConnectionProvider with ChangeNotifier {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   final DatabaseReference _databaseRef = FirebaseDatabase.instance.ref();
-  
-  bool _isConnected = false;
-  User? _user;
-  late StreamSubscription<User?> _authStateSubscription;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  User? _anonymousUser;
 
+  bool _isConnected = false;
   bool get isConnected => _isConnected;
 
-  ConnectionProvider() {
-    // Escuchar los cambios en el estado de autenticación
-    _authStateSubscription = _auth.authStateChanges().listen((User? user) {
-      _user = user;
-      _isConnected = (user != null);
-      
-      if (_isConnected) {
-        // Marcar el estado como 'connected' en la base de datos cuando el usuario se autentica
-        _databaseRef.child('status').set('connected');
-        // Asegurarse de que al desconectarse, el estado cambie
-        _databaseRef.child('status').onDisconnect().set('disconnected');
-      }
-      
-      notifyListeners();
-    });
-  }
+  // El constructor ahora está vacío, no se conecta automáticamente
+  ConnectionProvider();
 
-  // Conectar usando autenticación anónima
+  // MÉTODO PARA CONECTAR MANUALMENTE
   Future<void> connect() async {
+    if (isConnected) return; // Si ya está conectado, no hace nada
     try {
-      if (_user == null) {
-        await _auth.signInAnonymously();
-      }
+      // Inicia sesión de forma anónima para esta sesión de control
+      UserCredential userCredential = await _auth.signInAnonymously();
+      _anonymousUser = userCredential.user;
+      print("Sesión anónima iniciada: ${_anonymousUser?.uid}");
+
+      // Una vez autenticado, configura el estado en la base de datos
+      await _databaseRef.child('status').set('connected');
+      await _databaseRef.child('status').onDisconnect().set('disconnected');
+
+      _isConnected = true;
+      print("Conexión con Realtime Database establecida.");
     } catch (e) {
-      print("Error al conectar anónimamente: $e");
+      _isConnected = false;
+      print("Error al conectar: $e");
     }
-    // El listener de authStateChanges se encargará de notificar a los widgets
+    notifyListeners();
   }
 
-  // Desconectar
+  // MÉTODO PARA DESCONECTAR MANUALMENTE
   Future<void> disconnect() async {
+    if (!isConnected) return; // Si no está conectado, no hace nada
     try {
-      await _auth.signOut();
-      // El listener de authStateChanges se encargará de notificar a los widgets
+      // Actualiza el estado en la base de datos antes de desconectar
+      await _databaseRef.child('status').set('disconnected');
+      if (_anonymousUser != null) {
+        // Cierra la sesión anónima actual
+        await _auth.signOut();
+        _anonymousUser = null;
+        print("Sesión anónima cerrada.");
+      }
+       _isConnected = false;
+       print("Conexión con Realtime Database terminada.");
     } catch (e) {
       print("Error al desconectar: $e");
     }
+    notifyListeners();
   }
 
-  // Método para enviar comandos a la Realtime Database
   Future<void> sendCommand(String command) async {
-    if (_isConnected) {
+    if (isConnected) {
       try {
-        // Usamos push() para crear una lista de comandos y no sobreescribir el último
         await _databaseRef.child('control/command').set(command);
         print("Comando '$command' enviado.");
       } catch (e) {
-        print("Error al enviar comando a Firebase: $e");
+        print("Error al enviar comando: $e");
       }
     } else {
-      print("No se puede enviar el comando, no hay conexión a Firebase.");
+      print("No se puede enviar el comando, no hay conexión.");
     }
   }
 
-  @override
+   @override
   void dispose() {
-    _authStateSubscription.cancel();
+    // Asegurarse de desconectar si el provider se destruye
+    if(isConnected) {
+      disconnect();
+    }
     super.dispose();
   }
 }
 
-// Provider para el tema de la aplicación
+// --- Gestor de Estado para el Tema ---
 class ThemeProvider with ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.dark;
-
   ThemeMode get themeMode => _themeMode;
 
   void toggleTheme() {
@@ -92,22 +97,16 @@ class ThemeProvider with ChangeNotifier {
   }
 }
 
+// --- Punto de Entrada Principal ---
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (context) => ThemeProvider()),
-        ChangeNotifierProvider(create: (context) => ConnectionProvider()),
-      ],
-      child: const MyApp(),
-    ),
-  );
+  runApp(const MyApp());
 }
 
+// --- Widget Raíz ---
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -116,68 +115,65 @@ class MyApp extends StatelessWidget {
     const Color primarySeedColor = Colors.indigo;
     final TextTheme appTextTheme = GoogleFonts.poppinsTextTheme(Theme.of(context).textTheme);
 
-    final ElevatedButtonThemeData elevatedButtonTheme = ElevatedButtonThemeData(
-      style: ElevatedButton.styleFrom(
-        foregroundColor: Colors.white,
-        backgroundColor: primarySeedColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        textStyle: appTextTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
-        elevation: 5,
-        shadowColor: Colors.black.withOpacity(0.4),
-      ),
-    );
-
-    final ThemeData lightTheme = ThemeData(
+    final lightTheme = ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
       colorScheme: ColorScheme.fromSeed(seedColor: primarySeedColor, brightness: Brightness.light),
       textTheme: appTextTheme,
-      appBarTheme: AppBarTheme(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        titleTextStyle: appTextTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.black87),
-      ),
-      scaffoldBackgroundColor: const Color(0xFFF5F7FA),
-      elevatedButtonTheme: elevatedButtonTheme,
-      cardTheme: CardThemeData(
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        color: Colors.white,
-      ),
+      appBarTheme: AppBarTheme(titleTextStyle: appTextTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.black87)),
     );
 
-    final ThemeData darkTheme = ThemeData(
+    final darkTheme = ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: ColorScheme.fromSeed(seedColor: primarySeedColor, brightness: Brightness.dark),
       textTheme: appTextTheme,
-      appBarTheme: AppBarTheme(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        titleTextStyle: appTextTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
-      ),
-      scaffoldBackgroundColor: const Color(0xFF1A1C2A),
-      elevatedButtonTheme: elevatedButtonTheme,
-      cardTheme: CardThemeData(
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        color: const Color(0xFF26293D),
-      ),
+      appBarTheme: AppBarTheme(titleTextStyle: appTextTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
     );
 
-    return Consumer<ThemeProvider>(
-      builder: (context, themeProvider, child) {
-        return MaterialApp(
-          title: 'AutitoCar Control',
-          theme: lightTheme,
-          darkTheme: darkTheme,
-          themeMode: themeProvider.themeMode,
-          debugShowCheckedModeBanner: false,
-          home: const ControlScreen(),
-        );
+    return ChangeNotifierProvider(
+      create: (context) => ThemeProvider(),
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
+          return MaterialApp(
+            title: 'AutitoCar Control',
+            theme: lightTheme,
+            darkTheme: darkTheme,
+            themeMode: themeProvider.themeMode,
+            debugShowCheckedModeBanner: false,
+            home: const AuthWrapper(),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// --- Widget de Envoltura de Autenticación ---
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // Este StreamBuilder sigue controlando el login principal (Email/Password)
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+
+        // Si el snapshot tiene un usuario Y NO es anónimo, es el usuario principal
+        if (snapshot.hasData && !snapshot.data!.isAnonymous) {
+          // Proveemos el ConnectionProvider a la pantalla de control
+          return ChangeNotifierProvider(
+            create: (context) => ConnectionProvider(),
+            child: const ControlScreen(),
+          );
+        }
+        
+        // En cualquier otro caso (sin usuario, o solo un usuario anónimo residual), muestra el login
+        return const LoginScreen();
       },
     );
   }

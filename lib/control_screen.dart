@@ -1,34 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:myapp/main.dart'; // Importa ConnectionProvider y ThemeProvider
 
-// Pantalla principal de control
-class ControlScreen extends StatefulWidget {
+class ControlScreen extends StatelessWidget {
   const ControlScreen({super.key});
 
-  @override
-  State<ControlScreen> createState() => _ControlScreenState();
-}
-
-class _ControlScreenState extends State<ControlScreen> {
-
-  @override
-  void initState() {
-    super.initState();
-    // Intenta conectarse a Firebase automáticamente cuando la pantalla se carga
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<ConnectionProvider>(context, listen: false).connect();
-    });
-  }
-
-  // Método para enviar un comando a través del ConnectionProvider
+  // Método para enviar un comando
   void _sendCommand(BuildContext context, String command) {
     Provider.of<ConnectionProvider>(context, listen: false).sendCommand(command);
   }
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -38,7 +23,17 @@ class _ControlScreenState extends State<ControlScreen> {
           IconButton(
             icon: Icon(isDarkMode ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
             onPressed: () => themeProvider.toggleTheme(),
-            tooltip: 'Toggle Theme',
+            tooltip: 'Cambiar Tema',
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () {
+              // Primero, nos aseguramos de desconectar la sesión anónima si está activa
+              Provider.of<ConnectionProvider>(context, listen: false).disconnect();
+              // Luego, cerramos la sesión principal del usuario
+              FirebaseAuth.instance.signOut();
+            },
+            tooltip: 'Cerrar Sesión',
           ),
         ],
       ),
@@ -58,16 +53,18 @@ class _ControlScreenState extends State<ControlScreen> {
             child: Center(
               child: Consumer<ConnectionProvider>(
                 builder: (context, connection, child) {
+                  final bool isConnected = connection.isConnected;
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      _buildStatusIndicator(context, connection.isConnected, isDarkMode),
-                      const SizedBox(height: 30),
-                      _buildConnectionButtons(context, connection),
+                      // WIDGETS RESTAURADOS: Botones de Conectar/Desconectar
+                      _buildConnectionControls(context, connection, isConnected),
+                      const SizedBox(height: 20),
+                      _buildStatusIndicator(context, isConnected, isDarkMode),
                       const SizedBox(height: 40),
-                      _buildDirectionalControls(context, connection.isConnected),
+                      _buildDirectionalControls(context, isConnected),
                       const SizedBox(height: 30),
-                      _buildExtraControls(context, connection.isConnected),
+                      _buildExtraControls(context, isConnected),
                     ],
                   );
                 },
@@ -76,6 +73,30 @@ class _ControlScreenState extends State<ControlScreen> {
           ),
         ),
       ),
+    );
+  }
+  
+  // --- WIDGETS RESTAURADOS ---
+  Widget _buildConnectionControls(BuildContext context, ConnectionProvider connection, bool isConnected) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        ElevatedButton.icon(
+          icon: const Icon(Icons.power_settings_new),
+          label: const Text('Conectar'),
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+          // Se habilita solo si no está ya conectado
+          onPressed: isConnected ? null : () => connection.connect(),
+        ),
+        const SizedBox(width: 16),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.power_off),
+          label: const Text('Desconectar'),
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+          // Se habilita solo si está conectado
+          onPressed: isConnected ? () => connection.disconnect() : null,
+        ),
+      ],
     );
   }
 
@@ -106,7 +127,7 @@ class _ControlScreenState extends State<ControlScreen> {
             Icon(isConnected ? Icons.cloud_done : Icons.cloud_off, color: Colors.white, size: 20),
             const SizedBox(width: 12),
             Text(
-              isConnected ? 'CONECTADO A FIREBASE' : 'DESCONECTADO',
+              isConnected ? 'CONECTADO' : 'DESCONECTADO',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -116,39 +137,6 @@ class _ControlScreenState extends State<ControlScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  // Widget para los botones de conexión y desconexión
-  Widget _buildConnectionButtons(BuildContext context, ConnectionProvider connection) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        ElevatedButton.icon(
-          onPressed: connection.isConnected ? null : () => connection.connect(),
-          icon: const Icon(Icons.login, size: 20),
-          label: const Text('CONECTAR'),
-          style: Theme.of(context).elevatedButtonTheme.style?.copyWith(
-                backgroundColor: MaterialStateProperty.resolveWith<Color?>((states) {
-                  if (states.contains(MaterialState.disabled)) return Colors.grey.shade600;
-                  return Theme.of(context).colorScheme.primary;
-                }),
-              ),
-        ),
-        const SizedBox(width: 20),
-        ElevatedButton.icon(
-          onPressed: connection.isConnected ? () => connection.disconnect() : null,
-          icon: const Icon(Icons.logout, size: 20),
-          label: const Text('DESCONECTAR'),
-          style: Theme.of(context).elevatedButtonTheme.style?.copyWith(
-                backgroundColor: MaterialStateProperty.resolveWith<Color?>((states) {
-                  if (states.contains(MaterialState.disabled)) return Colors.grey.shade600;
-                  return Theme.of(context).colorScheme.error;
-                }),
-                foregroundColor: MaterialStateProperty.all(Colors.white),
-              ),
-        ),
-      ],
     );
   }
 
@@ -162,7 +150,7 @@ class _ControlScreenState extends State<ControlScreen> {
     }
 
     void handleRelease() {
-      if (isConnected) _sendCommand(context, 'P'); // Enviar 'P' (Parar) al soltar
+      if (isConnected) _sendCommand(context, 'P');
     }
 
     return SizedBox(
@@ -188,7 +176,7 @@ class _ControlScreenState extends State<ControlScreen> {
     );
   }
 
-  // Widget para los botones de acción adicionales (bocina, luces)
+  // Widget para los botones de acción adicionales
   Widget _buildExtraControls(BuildContext context, bool isConnected) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -208,7 +196,7 @@ class _ControlScreenState extends State<ControlScreen> {
             if (isEnabled) _sendCommand(context, command);
           },
           onTapUp: (_) {
-             if (isEnabled) _sendCommand(context, 'p'); // Comando para apagar la bocina/luz
+             if (isEnabled) _sendCommand(context, 'p');
           },
           child: CircleAvatar(
             radius: 35,
@@ -222,8 +210,6 @@ class _ControlScreenState extends State<ControlScreen> {
     );
   }
 
-
-  // Widget reutilizable para un botón de control
   Widget _buildControlButton(BuildContext context, {required IconData icon, required VoidCallback onPress, required VoidCallback onRelease, required bool isEnabled, required double size, required double borderRadius}) {
     final Color baseColor = Theme.of(context).colorScheme.primary;
 
