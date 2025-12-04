@@ -11,6 +11,16 @@ class ControlScreen extends StatefulWidget {
 }
 
 class _ControlScreenState extends State<ControlScreen> {
+
+  @override
+  void initState() {
+    super.initState();
+    // Intenta conectarse a Firebase automáticamente cuando la pantalla se carga
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<ConnectionProvider>(context, listen: false).connect();
+    });
+  }
+
   // Método para enviar un comando a través del ConnectionProvider
   void _sendCommand(BuildContext context, String command) {
     Provider.of<ConnectionProvider>(context, listen: false).sendCommand(command);
@@ -93,10 +103,10 @@ class _ControlScreenState extends State<ControlScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(isConnected ? Icons.wifi : Icons.wifi_off, color: Colors.white, size: 20),
+            Icon(isConnected ? Icons.cloud_done : Icons.cloud_off, color: Colors.white, size: 20),
             const SizedBox(width: 12),
             Text(
-              isConnected ? 'CONECTADO' : 'DESCONECTADO',
+              isConnected ? 'CONECTADO A FIREBASE' : 'DESCONECTADO',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -116,7 +126,7 @@ class _ControlScreenState extends State<ControlScreen> {
       children: [
         ElevatedButton.icon(
           onPressed: connection.isConnected ? null : () => connection.connect(),
-          icon: const Icon(Icons.wifi_tethering, size: 20),
+          icon: const Icon(Icons.login, size: 20),
           label: const Text('CONECTAR'),
           style: Theme.of(context).elevatedButtonTheme.style?.copyWith(
                 backgroundColor: MaterialStateProperty.resolveWith<Color?>((states) {
@@ -128,8 +138,8 @@ class _ControlScreenState extends State<ControlScreen> {
         const SizedBox(width: 20),
         ElevatedButton.icon(
           onPressed: connection.isConnected ? () => connection.disconnect() : null,
-          icon: const Icon(Icons.power_settings_new, size: 20),
-          label: const Text('APAGAR'),
+          icon: const Icon(Icons.logout, size: 20),
+          label: const Text('DESCONECTAR'),
           style: Theme.of(context).elevatedButtonTheme.style?.copyWith(
                 backgroundColor: MaterialStateProperty.resolveWith<Color?>((states) {
                   if (states.contains(MaterialState.disabled)) return Colors.grey.shade600;
@@ -152,7 +162,7 @@ class _ControlScreenState extends State<ControlScreen> {
     }
 
     void handleRelease() {
-      if (isConnected) _sendCommand(context, 'stop'); // Enviar 'stop' al soltar
+      if (isConnected) _sendCommand(context, 'P'); // Enviar 'P' (Parar) al soltar
     }
 
     return SizedBox(
@@ -194,8 +204,11 @@ class _ControlScreenState extends State<ControlScreen> {
     return Column(
       children: [
         GestureDetector(
-          onTap: () {
+          onTapDown: (_) {
             if (isEnabled) _sendCommand(context, command);
+          },
+          onTapUp: (_) {
+             if (isEnabled) _sendCommand(context, 'p'); // Comando para apagar la bocina/luz
           },
           child: CircleAvatar(
             radius: 35,

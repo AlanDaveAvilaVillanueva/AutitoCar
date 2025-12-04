@@ -2,45 +2,81 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:myapp/control_screen.dart';
-import 'package:http/http.dart' as http;
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'firebase_options.dart';
+import 'dart:async';
 
-// Provider para gestionar el estado de la conexión WiFi
+// Provider para gestionar el estado de la conexión con Firebase
 class ConnectionProvider with ChangeNotifier {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final DatabaseReference _databaseRef = FirebaseDatabase.instance.ref();
+  
   bool _isConnected = false;
-  final String _host = "192.168.1.100"; // IP del host de Arduino (ajustar si es necesario)
+  User? _user;
+  late StreamSubscription<User?> _authStateSubscription;
 
   bool get isConnected => _isConnected;
 
+  ConnectionProvider() {
+    // Escuchar los cambios en el estado de autenticación
+    _authStateSubscription = _auth.authStateChanges().listen((User? user) {
+      _user = user;
+      _isConnected = (user != null);
+      
+      if (_isConnected) {
+        // Marcar el estado como 'connected' en la base de datos cuando el usuario se autentica
+        _databaseRef.child('status').set('connected');
+        // Asegurarse de que al desconectarse, el estado cambie
+        _databaseRef.child('status').onDisconnect().set('disconnected');
+      }
+      
+      notifyListeners();
+    });
+  }
+
+  // Conectar usando autenticación anónima
   Future<void> connect() async {
     try {
-      // Intenta hacer una petición simple para verificar la conexión
-      final response = await http.get(Uri.parse('http://$_host/'));
-      if (response.statusCode == 200) {
-        _isConnected = true;
-      } else {
-        _isConnected = false;
+      if (_user == null) {
+        await _auth.signInAnonymously();
       }
     } catch (e) {
-      _isConnected = false;
+      print("Error al conectar anónimamente: $e");
     }
-    notifyListeners();
+    // El listener de authStateChanges se encargará de notificar a los widgets
   }
 
-  void disconnect() {
-    _isConnected = false;
-    notifyListeners();
+  // Desconectar
+  Future<void> disconnect() async {
+    try {
+      await _auth.signOut();
+      // El listener de authStateChanges se encargará de notificar a los widgets
+    } catch (e) {
+      print("Error al desconectar: $e");
+    }
   }
 
-  // Método para enviar comandos al Arduino
+  // Método para enviar comandos a la Realtime Database
   Future<void> sendCommand(String command) async {
     if (_isConnected) {
       try {
-        await http.get(Uri.parse('http://$_host/control?command=$command'));
+        // Usamos push() para crear una lista de comandos y no sobreescribir el último
+        await _databaseRef.child('control/command').set(command);
+        print("Comando '$command' enviado.");
       } catch (e) {
-        // Manejar errores de envío si es necesario
-        print('Error al enviar comando: $e');
+        print("Error al enviar comando a Firebase: $e");
       }
+    } else {
+      print("No se puede enviar el comando, no hay conexión a Firebase.");
     }
+  }
+
+  @override
+  void dispose() {
+    _authStateSubscription.cancel();
+    super.dispose();
   }
 }
 
@@ -56,7 +92,11 @@ class ThemeProvider with ChangeNotifier {
   }
 }
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(
     MultiProvider(
       providers: [

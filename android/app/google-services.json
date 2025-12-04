@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "76181314422",
+    "project_id": "autitocar-42115182-79f5b",
+    "storage_bucket": "autitocar-42115182-79f5b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:76181314422:android:58a21da0c75091af7bb857",
+        "android_client_info": {
+          "package_name": "com.example.myapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC2c6Vk8mNNkKQrHAZhLS4mYCPVas9hYRs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
